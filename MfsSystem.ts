@@ -1,73 +1,83 @@
 import { Bytes, bytesToBuffer } from "byte/Bytes";
 import { assert } from "chai";
 import { bytesToContentId } from "content/LocalContents";
-import { explain } from "explain/Explains";
+import { clarify, explain } from "explain/Explains";
 import { trace } from "explain/Tracer";
 import { ipfsClientNode } from "ipfs/client/IpfsClients";
 import { createMfsInstance, MfsWriteOptions } from "ipfs/Mfs";
 import { stringToBuffer } from "string/Strings";
-import { joinToBase, System, SystemScheme, WriteOptions } from "system/Systems";
+import { urlStringToParts } from "string/Urls";
+import {
+  envImpl,
+  joinToBase,
+  System,
+  SystemScheme,
+  WriteOptions,
+} from "system/Systems";
 import { Test } from "test/Test";
 
 const DEFAULT_IPFS_PORT = 5001;
 
 export function createMfsSystem(systemName: string, baseUrl: URL): System {
-  const [ipfsBase, pathBase] = urlToMfsBases(baseUrl);
-  const ipfsNode = ipfsClientNode(ipfsBase);
-  const mfs = createMfsInstance(ipfsNode);
-  const environment = {};
-  return {
-    env: (key, valueMaybe) => {
-      if (valueMaybe === undefined) {
-        return environment[key];
-      }
-      return (environment[key] = valueMaybe);
-    },
-    name: () => systemName,
-    selectSystems: () => {
-      throw new Error("selectSystem not implemented");
-    },
-    subSystem: (sub) =>
-      createMfsSystem(
-        [systemName, sub].join("/"),
-        new URL([baseUrl.toString(), sub].join("/"))
-      ),
-    exit: (code) => () => undefined,
-    cwd: () => undefined,
-    homedir: () => undefined,
-    readFile: (path, options) =>
-      explain(
-        `MfsSystem: ${systemName} readFile path: ${path} ignored options: ${options}`,
-        mfs.mfsRead(joinToBase(pathBase, path))
-        // mfs.readCid(path)
-      ),
-    writeFile: (bytes, path, options) =>
-      explain(
-        `MfsSystem: ${systemName} writeFile path: ${path} options: ${options}`,
-        pathOrContentId(bytes, path).then((pathOrCid) => {
-          const joinedPath = joinToBase(pathBase, pathOrCid);
-          return mfs
-            .mfsStat(joinedPath)
-            .then((stat) => {
-              trace(() => [`file exists, skipping writing ${pathOrCid}`, stat]);
-              return pathOrCid;
-            })
-            .catch((reason) => {
-              trace(() => [
-                `file does not exist, writing ${pathOrCid}`,
-                reason,
-              ]);
+  return clarify(
+    `createMfsSystem: systemName: ${systemName}, baseUrl: ${baseUrl}`,
+    () => {
+      const [ipfsBase, pathBase] = urlToMfsBases(baseUrl);
+      const ipfsNode = ipfsClientNode(ipfsBase);
+      const mfs = createMfsInstance(ipfsNode);
+      const environment = {};
+      return {
+        env: (key, valueMaybe) => envImpl(environment, key, valueMaybe),
+        name: () => systemName,
+        selectSystems: () => {
+          throw new Error("selectSystem not implemented");
+        },
+        subSystem: (sub) =>
+          createMfsSystem(
+            [systemName, sub].join("/"),
+            new URL([baseUrl.toString(), sub].join("/"))
+          ),
+        exit: (code) => () => undefined,
+        cwd: () => undefined,
+        homedir: () => undefined,
+        readFile: (path, options) =>
+          explain(
+            `MfsSystem: ${systemName} readFile path: ${path} ignored options: ${options}`,
+            mfs.mfsRead(joinToBase(pathBase, path))
+            // mfs.readCid(path)
+          ),
+        writeFile: (bytes, path, options) =>
+          explain(
+            `MfsSystem: ${systemName} writeFile path: ${path} options: ${options}`,
+            pathOrContentId(bytes, path).then((pathOrCid) => {
+              const joinedPath = joinToBase(pathBase, pathOrCid);
               return mfs
-                .mfsWrite(
-                  joinedPath,
-                  bytes,
-                  systemWriteOptionsToMfsWriteOptions(options)
-                )
-                .then(() => pathOrCid);
-            });
-        })
-      ),
-  };
+                .mfsStat(joinedPath)
+                .then((stat) => {
+                  trace(() => [
+                    `file exists, skipping writing ${pathOrCid}`,
+                    stat,
+                  ]);
+                  return pathOrCid;
+                })
+                .catch((reason) => {
+                  trace(() => [
+                    `file does not exist, writing ${pathOrCid}`,
+                    reason,
+                  ]);
+                  return mfs
+                    .mfsWrite(
+                      joinedPath,
+                      bytes,
+                      systemWriteOptionsToMfsWriteOptions(options)
+                    )
+                    .then(() => pathOrCid);
+                });
+            })
+          ),
+      };
+    }
+  );
 }
 
 function pathOrContentId(bytes: Bytes, path: string): Promise<string> {
@@ -78,18 +88,22 @@ function pathOrContentId(bytes: Bytes, path: string): Promise<string> {
 }
 
 function urlToMfsBases(url: URL): [string, string] {
-  if (url.protocol !== SystemScheme.mfs) {
-    throw new Error(
-      `wrong scheme to create MfsSystem, scheme: ${url.protocol}`
-    );
-  }
-  const hostname = url.hostname;
-  let port = url?.port;
-  if (port === undefined || port === "") {
+  const [scheme, host, portMaybe, pathArray, query] = urlStringToParts(
+    url.toString()
+  );
+  // if (url.protocol !== SystemScheme.mfs) {
+  //   throw new Error(
+  //     `wrong scheme to create MfsSystem, scheme: ${url.protocol}`
+  //   );
+  // }
+  // const hostname = url.hostname;
+  // let port = url?.port;
+  let port = portMaybe;
+  if (portMaybe === undefined || portMaybe === "") {
     port = String(DEFAULT_IPFS_PORT);
   }
-  const path = url.pathname === "" ? "/" : url.pathname;
-  return [`/dns4/${hostname}/tcp/${port}`, path];
+  const path = "/" + pathArray.join("/");
+  return [`/dns4/${host}/tcp/${port}`, path];
 }
 
 function systemWriteOptionsToMfsWriteOptions(

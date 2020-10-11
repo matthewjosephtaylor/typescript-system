@@ -1,11 +1,10 @@
-import { bytesToBuffer, bytesToString } from "byte/Bytes";
+import { bytesToBuffer } from "byte/Bytes";
 import { assert } from "chai";
 import { explain } from "explain/Explains";
-import { enableTrace } from "explain/Tracer";
 import { ipfsClientNode } from "ipfs/client/IpfsClients";
 import { createIpfsContentInstance } from "ipfs/IpfsContents";
 import { stringToBuffer } from "string/Strings";
-import { System, SystemScheme } from "system/Systems";
+import { envImpl, System, SystemScheme } from "system/Systems";
 import { Test } from "test/Test";
 
 const DEFAULT_IPFS_PORT = 5001;
@@ -16,12 +15,7 @@ export function createIpfsSystem(systemName: string, baseUrl: URL): System {
   const ipfs = createIpfsContentInstance(ipfsNode);
   const environment = {};
   return {
-    env: (key, valueMaybe) => {
-      if (valueMaybe === undefined) {
-        return environment[key];
-      }
-      return (environment[key] = valueMaybe);
-    },
+    env: (key, valueMaybe) => envImpl(environment, key, valueMaybe),
     name: () => systemName,
     selectSystems: () => {
       throw new Error("selectSystem not implemented");

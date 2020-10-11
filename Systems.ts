@@ -3,6 +3,7 @@ import { clarify } from "explain/Explains";
 import { trace } from "explain/Tracer";
 import { firstValue } from "object/Objects";
 import { createIpfsSystem } from "system/IpfsSystem";
+import { createMemorySystem } from "system/MemorySystem";
 import { createMfsSystem } from "system/MfsSystem";
 import { UrlString } from "texture/Textures";
 import { createNodeSystem } from "./NodeSystem";
@@ -18,6 +19,7 @@ export type WriteOptions = {
   flag?: "w" | "wx";
 };
 export type System = {
+  dump?: () => unknown;
   env: (key: string, value?: string) => string;
   name: () => string;
   selectSystems: (predicate: (system: System) => boolean) => System[];
@@ -37,6 +39,7 @@ export enum SystemScheme {
   ipfs = "ipfs:",
   file = "file:",
   mfs = "mfs:",
+  mem = "mem:",
 }
 
 export function createSystem(
@@ -56,6 +59,9 @@ export function createSystem(
       }
       case SystemScheme.file: {
         return createNodeSystem(systemName, url);
+      }
+      case SystemScheme.mem: {
+        return createMemorySystem(systemName, url);
       }
       default: {
         throw new Error(
@@ -111,4 +117,11 @@ export function nameMaybeToSelectedSystem(
     throw new Error(`No system found for systemName: ${systemNameMaybe}`);
   }
   return resultSystem;
+}
+
+export function envImpl(store: object, key: string, valueMaybe: string) {
+  if (valueMaybe === undefined) {
+    return store[key];
+  }
+  return (store[key] = valueMaybe);
 }

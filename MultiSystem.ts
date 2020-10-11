@@ -1,10 +1,11 @@
 import { Bytes } from "byte/Bytes";
-import { ContentId } from "content/Contents";
 import { clarify, explain } from "explain/Explains";
 import { trace } from "explain/Tracer";
 import { ugly } from "log/Logs";
 import { loop, valueOrElse } from "object/Objects";
 import { ReadOptions, System, WriteOptions } from "system/Systems";
+
+type ContentId = string;
 
 const DEFAULT_TIMEOUT = 10 * 1000;
 export function createMultiSystem(
@@ -17,9 +18,12 @@ export function createMultiSystem(
     },
     name: () => systemName,
     selectSystems: (predicate) =>
-      clarify(`selectSystems: systemName: ${systemName} systems.length: ${systems.length}`, () => {
-        return systems.filter((sys) => predicate(sys));
-      }),
+      clarify(
+        `selectSystems: systemName: ${systemName} systems.length: ${systems.length}`,
+        () => {
+          return systems.filter((sys) => predicate(sys));
+        }
+      ),
     subSystem: (sub: string) =>
       createMultiSystem(
         [systemName, sub].join("/"),
